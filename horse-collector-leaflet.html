@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Wayfound — Horse Collecting (Leaflet / OpenStreetMap)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<!--
+  No API key, no signup, no billing. Map tiles come from OpenStreetMap
+  contributors (via CARTO's free dark basemap) — just host this file
+  anywhere (GitHub Pages, Vercel, Netlify, your own server) and it works.
+  Please keep usage reasonable and keep the attribution in the corner —
+  that's the only condition of the free tile service.
+-->
+<style>
+:root{
+  --bg:#0e1310; --ink:#eee7d8; --ink-dim:#a9b2a6;
+  --moss:#3f5c48; --gold:#d9ac4a; --gold-l:#f2cd77;
+  --secret:#8a5fb0; --r:16px;
+  box-sizing:border-box;
+}
+*{box-sizing:border-box;}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',sans-serif;overflow:hidden;}
+body{display:flex;flex-direction:column;}
+h1,h2,h3,.serif{font-family:'Fraunces',serif;}
+#app{position:relative;flex:1;overflow:hidden;}
+.screen{position:absolute;inset:0;display:none;flex-direction:column;}
+.screen.active{display:flex;}
+#map-screen{position:relative;}
+#leaflet-map{position:absolute;inset:0;background:#0e1310;}
+.leaflet-control-attribution{background:rgba(14,19,16,0.75) !important;color:var(--ink-dim) !important;font-size:9px !important;}
+.leaflet-control-attribution a{color:var(--ink-dim) !important;}
+.top-bar{position:absolute;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:center;padding:10px 16px;padding-top:calc(10px + env(safe-area-inset-top,0px));z-index:500;pointer-events:none;}
+.top-bar>*{pointer-events:auto;}
+.pill{background:rgba(14,19,16,0.85);border:1px solid rgba(255,255,255,0.15);border-radius:999px;padding:8px 14px;font-size:13px;color:var(--ink-dim);}
+.icon-btn{width:42px;height:42px;border-radius:50%;background:rgba(14,19,16,0.85);border:1px solid rgba(255,255,255,0.15);display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;color:var(--ink);}
+.bottom-bar{position:absolute;bottom:0;left:0;right:0;display:flex;gap:10px;padding:14px 16px;padding-bottom:calc(14px + env(safe-area-inset-bottom,0px));background:linear-gradient(to top, rgba(0,0,0,0.6), transparent);z-index:500;}
+.selected-card{flex:1;background:rgba(14,19,16,0.9);border:1px solid rgba(255,255,255,0.15);border-radius:14px;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;}
+.selected-card .name{font-family:'Fraunces',serif;font-size:15px;}
+.selected-card .meta{font-size:12px;color:var(--ink-dim);}
+.safety-note{position:absolute;top:60px;left:50%;transform:translateX(-50%);font-size:11px;color:var(--ink-dim);background:rgba(14,19,16,0.85);padding:6px 14px;border-radius:999px;z-index:500;text-align:center;max-width:80vw;}
+.panel-header{display:flex;align-items:center;gap:12px;padding:14px 16px;padding-top:calc(14px + env(safe-area-inset-top,0px));border-bottom:1px solid rgba(255,255,255,0.08);}
+.panel-header h2{margin:0;font-size:20px;font-weight:600;}
+.panel-body{flex:1;overflow-y:auto;padding:16px;padding-bottom:calc(24px + env(safe-area-inset-bottom,0px));}
+.dex-summary{background:rgba(255,255,255,0.05);border-radius:var(--r);padding:14px 16px;margin-bottom:16px;}
+.dex-summary .big{font-family:'Fraunces',serif;font-size:26px;}
+.dex-rarity-row{display:flex;gap:14px;margin-top:8px;font-size:12px;color:var(--ink-dim);flex-wrap:wrap;}
+.dex-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;}
+.mini-card{border-radius:14px;padding:12px;cursor:pointer;position:relative;overflow:hidden;border:1px solid rgba(255,255,255,0.08);}
+.mini-card .art{font-size:34px;text-align:center;margin-bottom:6px;}
+.mini-card .nm{font-family:'Fraunces',serif;font-size:14px;}
+.mini-card .br{font-size:11px;color:var(--ink-dim);}
+.mini-card .tier-tag{position:absolute;top:8px;right:8px;font-size:9px;padding:2px 7px;border-radius:999px;background:rgba(0,0,0,0.15);}
+.mini-card.secret-hidden{display:flex;align-items:center;justify-content:center;flex-direction:column;background:rgba(255,255,255,0.03);color:var(--ink-dim);min-height:120px;}
+.tier-paper{background:linear-gradient(160deg,#efe8d2,#d9d0b4);color:#3a3428;}
+.tier-bronze{background:linear-gradient(160deg,#e0a866,#9c6430);color:#2b1a0a;}
+.tier-silver{background:linear-gradient(160deg,#e6ecee,#a7b4b8);color:#1f2a2c;}
+.tier-gold{background:linear-gradient(160deg,#f6da8d,#c99632);color:#2b2007;}
+.tier-platinum{background:linear-gradient(160deg,#f5f9f8,#c7d3d1);color:#1a2422;}
+#card-screen .panel-body{display:flex;flex-direction:column;align-items:center;gap:16px;}
+.big-card{width:min(300px,84vw);border-radius:22px;padding:20px;position:relative;box-shadow:0 12px 30px rgba(0,0,0,0.4);}
+.big-card .tier-label{font-size:11px;letter-spacing:.08em;text-align:center;opacity:.75;}
+.big-card .art-box{font-size:80px;text-align:center;margin:10px 0;}
+.big-card .h-name{font-family:'Fraunces',serif;font-size:24px;text-align:center;}
+.big-card .h-breed{text-align:center;font-size:13px;opacity:.8;}
+.big-card .h-id{text-align:center;font-size:11px;opacity:.6;margin-bottom:8px;}
+.big-card .rarity-tag{display:block;text-align:center;font-size:12px;letter-spacing:.06em;margin-bottom:10px;}
+.stat-row{display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-top:1px solid rgba(0,0,0,0.08);}
+.big-card.secret{border:2px solid var(--secret);}
+.xp-block{width:min(300px,84vw);background:rgba(255,255,255,0.05);border-radius:14px;padding:14px;}
+.xp-bar-bg{height:10px;border-radius:6px;background:rgba(255,255,255,0.08);overflow:hidden;margin:8px 0;}
+.xp-bar-fill{height:100%;background:linear-gradient(90deg,var(--gold),var(--gold-l));}
+.xp-labels{display:flex;justify-content:space-between;font-size:11px;color:var(--ink-dim);}
+.meta-block{width:min(300px,84vw);font-size:12px;color:var(--ink-dim);display:flex;flex-direction:column;gap:4px;}
+.select-btn{width:min(300px,84vw);padding:12px;border-radius:14px;background:var(--moss);color:var(--ink);border:none;font-size:14px;font-weight:600;cursor:pointer;}
+.overlay{position:absolute;inset:0;background:rgba(6,10,8,0.86);display:none;align-items:center;justify-content:center;flex-direction:column;z-index:900;padding:20px;text-align:center;}
+.overlay.active{display:flex;}
+.overlay .eyebrow{font-size:12px;letter-spacing:.1em;color:var(--ink-dim);margin-bottom:6px;}
+.overlay .big-name{font-family:'Fraunces',serif;font-size:28px;margin-bottom:4px;}
+.overlay button.primary{margin-top:18px;padding:12px 28px;border-radius:999px;border:none;background:var(--gold);color:#241a05;font-weight:700;font-size:14px;cursor:pointer;}
+.overlay button.secondary{margin-top:10px;background:none;border:none;color:var(--ink-dim);font-size:13px;cursor:pointer;}
+.secret-glow{color:var(--secret);text-shadow:0 0 16px rgba(138,95,176,0.7);}
+.fade-pop{animation:pop .35s ease;}
+@keyframes pop{from{opacity:0;transform:scale(.9);}to{opacity:1;transform:scale(1);}}
+.horse-pin{width:38px;height:38px;border-radius:50%;background:rgba(20,27,23,0.92);display:flex;align-items:center;justify-content:center;font-size:19px;box-shadow:0 2px 8px rgba(0,0,0,0.5);}
+.player-pin{width:18px;height:18px;border-radius:50%;background:var(--gold-l);border:2px solid #241a05;box-shadow:0 0 0 6px rgba(217,172,74,0.25);}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="screen active" id="map-screen">
+    <div id="leaflet-map"></div>
+    <div class="top-bar">
+      <div class="pill" id="loc-pill">Finding location…</div>
+      <div class="icon-btn" id="btn-dex">📖</div>
+    </div>
+    <div class="safety-note">Stay aware of your surroundings and only explore places you're allowed to be.</div>
+    <div class="bottom-bar">
+      <div class="selected-card" id="selected-card-bar"><div><div class="name">No horse selected</div><div class="meta">Catch a horse to begin</div></div></div>
+    </div>
+  </div>
+
+  <div class="screen" id="dex-screen">
+    <div class="panel-header"><div class="icon-btn" id="dex-back">←</div><h2>HorseDex</h2></div>
+    <div class="panel-body">
+      <div class="dex-summary"><div class="big" id="dex-count">0 / 50 breeds</div><div class="dex-rarity-row" id="dex-rarity-row"></div></div>
+      <h3 style="margin:0 0 10px;font-size:14px;color:var(--ink-dim);font-weight:600;">Your horses</h3>
+      <div class="dex-grid" id="dex-grid"></div>
+      <h3 style="margin:20px 0 10px;font-size:14px;color:var(--ink-dim);font-weight:600;">Secret</h3>
+      <div class="dex-grid" id="secret-grid"></div>
+    </div>
+  </div>
+
+  <div class="screen" id="card-screen">
+    <div class="panel-header"><div class="icon-btn" id="card-back">←</div><h2>Horse card</h2></div>
+    <div class="panel-body" id="card-body"></div>
+  </div>
+
+  <div class="overlay" id="encounter-overlay">
+    <div class="eyebrow" id="enc-rarity"></div>
+    <div class="art-box" style="font-size:70px;">🐴</div>
+    <div class="big-name" id="enc-name"></div>
+    <div id="enc-dist" style="color:var(--ink-dim);font-size:13px;"></div>
+    <button class="primary" id="enc-catch">Catch</button>
+    <button class="secondary" id="enc-close">Not now</button>
+  </div>
+  <div class="overlay" id="caught-overlay">
+    <div class="eyebrow">Horse caught!</div>
+    <div class="big-name fade-pop" id="caught-name"></div>
+    <div id="caught-meta" style="color:var(--ink-dim);font-size:13px;"></div>
+    <button class="primary" id="caught-ok">Nice</button>
+  </div>
+  <div class="overlay" id="levelup-overlay">
+    <div class="eyebrow">Your horse leveled up!</div>
+    <div class="big-name fade-pop" id="levelup-tier"></div>
+    <div id="levelup-horse" style="color:var(--ink-dim);font-size:13px;margin-bottom:10px;"></div>
+    <button class="primary" id="levelup-ok">Continue</button>
+  </div>
+  <div class="overlay" id="secret-overlay">
+    <div class="eyebrow secret-glow">Secret discovery</div>
+    <div class="big-name fade-pop" id="secret-name"></div>
+    <div class="eyebrow secret-glow" style="margin-top:6px;">Secret</div>
+    <button class="primary" id="secret-ok">Reveal card</button>
+  </div>
+</div>
+
+<script>
+/* ---------------- DATA LAYER ---------------- */
+const TIERS=[{id:'paper',label:'Paper',threshold:0},{id:'bronze',label:'Bronze',threshold:15000},{id:'silver',label:'Silver',threshold:50000},{id:'gold',label:'Gold',threshold:100000},{id:'platinum',label:'Platinum',threshold:350000}];
+function tierForXp(xp){ let cur=TIERS[0]; for(const t of TIERS){ if(xp>=t.threshold) cur=t; } return cur; }
+function nextTier(id){ const i=TIERS.findIndex(t=>t.id===id); return TIERS[i+1]||null; }
+
+const BREEDS=[['Quarter Horse','common'],['Morgan','common'],['Paint Horse','common'],['Shetland Pony','common'],['Mustang','common'],['Fjord','common'],['Welsh Cob','common'],['Belgian','common'],['Percheron','common'],['Suffolk Punch','common'],['Dartmoor Pony','common'],['Exmoor Pony','common'],['New Forest Pony','common'],['Fell Pony','common'],['Canadian Horse','common'],['Australian Stock Horse','common'],['Appaloosa','uncommon'],['Haflinger','uncommon'],['Tennessee Walking Horse','uncommon'],['Standardbred','uncommon'],['American Saddlebred','uncommon'],['Paso Fino','uncommon'],['Missouri Fox Trotter','uncommon'],['Rocky Mountain Horse','uncommon'],['Icelandic Horse','uncommon'],['Connemara','uncommon'],['Peruvian Paso','uncommon'],['Camargue','uncommon'],['Arabian','rare'],['Thoroughbred','rare'],['Friesian','rare'],['Andalusian','rare'],['Akhal-Teke','rare'],['Lusitano','rare'],['Clydesdale','rare'],['Shire','rare'],['Irish Sport Horse','rare'],['Dutch Warmblood','rare'],['Hanoverian','rare'],['Holsteiner','rare'],['Marwari','epic'],['Knabstrupper','epic'],['Gypsy Vanner','epic'],['Trakehner','epic'],['Oldenburg','epic'],['Mangalarga Marchador','epic'],['Welsh Pony','legendary'],['Lipizzaner','legendary'],['Caspian Horse','legendary']];
+const RARITY_WEIGHTS={common:60,uncommon:25,rare:10,epic:4,legendary:1};
+const RARITY_STARS={common:'',uncommon:'★',rare:'★',epic:'★★',legendary:'★★★',secret:'✦'};
+const COATS=['Bay','Chestnut','Black','Gray','Palomino','Buckskin','Dun','Roan','Pinto'];
+const MARKINGS=['Star','Blaze','Snip','Sock','None'];
+const NAMES=['Copper','Storm','Willow','Ranger','Comet','Biscuit','Apollo','Dusty','Midnight','Scout','Clover','Jasper','Blaze','Maple','River','Ember','Juniper','Sable','Frost','Pepper'];
+// Add real Secret horses here later, e.g. {key:'minnie',name:'Minnie',breed:'Thoroughbred',coat:'Bay',markings:'Star',stats:{...}}
+const SECRET_HORSES=[];
+const SECRET_SPAWN_CHANCE=0.0004;
+
+const STORE_KEY='wayfound_horses_leaflet_v1';
+function loadState(){ try{ const raw=localStorage.getItem(STORE_KEY); if(raw) return JSON.parse(raw);}catch(e){} return {horses:[],selectedId:null,breedCounter:{},discoveredSecrets:[],distanceAccum:0}; }
+let state=loadState();
+function saveState(){ try{localStorage.setItem(STORE_KEY,JSON.stringify(state));}catch(e){} }
+
+function pickRarity(){ const roll=Math.random()*100; let acc=0; for(const r of ['common','uncommon','rare','epic','legendary']){acc+=RARITY_WEIGHTS[r]; if(roll<=acc) return r;} return 'common'; }
+function breedsOfRarity(r){ return BREEDS.filter(b=>b[1]===r).map(b=>b[0]); }
+function randStat(){ return 20+Math.floor(Math.random()*70); }
+function genId(){ return 'h-'+Math.random().toString(36).slice(2,9); }
+function nextIndividualNumber(breed){ state.breedCounter[breed]=(state.breedCounter[breed]||0)+1; return state.breedCounter[breed]; }
+function generateHorse(forcedSecret){
+  if(forcedSecret){
+    const remaining=SECRET_HORSES.filter(s=>!state.discoveredSecrets.includes(s.key));
+    if(remaining.length===0) return generateHorse(false);
+    const s=remaining[Math.floor(Math.random()*remaining.length)];
+    return {id:genId(),individualId:'SECRET-'+String(state.discoveredSecrets.length+1).padStart(3,'0'),name:s.name,breed:s.breed,rarity:'secret',cardTier:'paper',xp:0,stats:s.stats||{speed:randStat(),endurance:randStat(),agility:randStat(),jumping:randStat(),dressage:randStat(),stamina:randStat()},coat:s.coat||'Bay',markings:s.markings||'None',discoveredAt:null,isSecret:true,secretKey:s.key};
+  }
+  const rarity=pickRarity(); const options=breedsOfRarity(rarity); const breed=options[Math.floor(Math.random()*options.length)]; const num=nextIndividualNumber(breed);
+  return {id:genId(),individualId:'#'+String(num).padStart(5,'0'),name:NAMES[Math.floor(Math.random()*NAMES.length)],breed,rarity,cardTier:'paper',xp:0,stats:{speed:randStat(),endurance:randStat(),agility:randStat(),jumping:randStat(),dressage:randStat(),stamina:randStat()},coat:COATS[Math.floor(Math.random()*COATS.length)],markings:MARKINGS[Math.floor(Math.random()*MARKINGS.length)],discoveredAt:null,isSecret:false};
+}
+
+/* ---------------- LEAFLET MAP ---------------- */
+let map, playerMarker, catchCircle, playerPos=null;
+let spawns=[]; // {horse, lat, lng, marker}
+const MAP_RADIUS_M=220, CATCH_RADIUS_M=25, MAX_SPAWNS=6;
+
+function haversine(lat1,lng1,lat2,lng2){ const R=6371000,toRad=d=>d*Math.PI/180; const dLat=toRad(lat2-lat1),dLng=toRad(lng2-lng1); const a=Math.sin(dLat/2)**2+Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLng/2)**2; return 2*R*Math.asin(Math.sqrt(a)); }
+function rarityColor(r){ return {common:'#5b7f63',uncommon:'#6fae7e',rare:'#5c9fd6',epic:'#b06fd6',legendary:'#d9ac4a'}[r]||'#5b7f63'; }
+
+function initMap(){
+  map = L.map('leaflet-map', {zoomControl:false, attributionControl:true}).setView([0,0], 18);
+  // Free, no-key dark basemap built from OpenStreetMap data via CARTO.
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    maxZoom:19,
+    attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+  }).addTo(map);
+  startLocation();
+}
+initMap();
+
+function horseIcon(horse){
+  return L.divIcon({ className:'', html:`<div class="horse-pin" style="border:2px solid ${horse.isSecret?'#8a5fb0':rarityColor(horse.rarity)}">${horse.isSecret?'❔':'🐴'}</div>`, iconSize:[38,38], iconAnchor:[19,19] });
+}
+const playerIcon = L.divIcon({ className:'', html:'<div class="player-pin"></div>', iconSize:[18,18], iconAnchor:[9,9] });
+
+function ensureSpawns(){
+  while(spawns.length<MAX_SPAWNS){
+    const angle=Math.random()*Math.PI*2, dist=40+Math.random()*(MAP_RADIUS_M-40);
+    const dLat=(Math.cos(angle)*dist)/111320, dLng=(Math.sin(angle)*dist)/(111320*Math.cos(playerPos.lat*Math.PI/180));
+    const isSecret=SECRET_HORSES.length>0 && Math.random()<SECRET_SPAWN_CHANCE;
+    const horse=generateHorse(isSecret), lat=playerPos.lat+dLat, lng=playerPos.lng+dLng;
+    const marker=L.marker([lat,lng], {icon:horseIcon(horse)}).addTo(map);
+    const entry={horse,lat,lng,marker};
+    marker.on('click', ()=>openEncounter(entry));
+    spawns.push(entry);
+  }
+}
+
+function startLocation(){
+  if(!navigator.geolocation){ document.getElementById('loc-pill').textContent='Location unavailable'; return; }
+  navigator.geolocation.watchPosition(pos=>{
+    const {latitude,longitude}=pos.coords;
+    if(playerPos){ const d=haversine(playerPos.lat,playerPos.lng,latitude,longitude); if(d>0.5&&d<200) onDistanceWalked(d); }
+    playerPos={lat:latitude,lng:longitude};
+    document.getElementById('loc-pill').textContent='Location found';
+    if(!playerMarker){
+      playerMarker=L.marker(playerPos, {icon:playerIcon, zIndexOffset:1000}).addTo(map);
+      catchCircle=L.circle(playerPos, {radius:CATCH_RADIUS_M, color:'#d9ac4a', weight:1, fillColor:'#d9ac4a', fillOpacity:0.08}).addTo(map);
+      map.setView(playerPos, 18);
+    } else {
+      playerMarker.setLatLng(playerPos);
+      catchCircle.setLatLng(playerPos);
+      map.panTo(playerPos);
+    }
+    ensureSpawns();
+  }, err=>{ document.getElementById('loc-pill').textContent='Enable location to explore'; }, {enableHighAccuracy:true, maximumAge:5000, timeout:10000});
+}
+
+let currentEncounter=null;
+function openEncounter(entry){
+  currentEncounter=entry;
+  const d = playerPos ? haversine(playerPos.lat,playerPos.lng,entry.lat,entry.lng) : 999;
+  document.getElementById('enc-rarity').textContent = entry.horse.isSecret ? '' : (RARITY_STARS[entry.horse.rarity]+' '+entry.horse.rarity.toUpperCase());
+  document.getElementById('enc-name').textContent = entry.horse.breed;
+  document.getElementById('enc-dist').textContent = Math.round(d)+' m away';
+  const catchBtn=document.getElementById('enc-catch');
+  catchBtn.disabled = d>CATCH_RADIUS_M; catchBtn.style.opacity = d>CATCH_RADIUS_M?0.4:1;
+  catchBtn.textContent = d>CATCH_RADIUS_M ? 'Get closer' : 'Catch';
+  document.getElementById('encounter-overlay').classList.add('active');
+}
+document.getElementById('enc-close').onclick=()=>document.getElementById('encounter-overlay').classList.remove('active');
+document.getElementById('enc-catch').onclick=()=>{
+  const entry=currentEncounter; const d=playerPos?haversine(playerPos.lat,playerPos.lng,entry.lat,entry.lng):999;
+  if(d>CATCH_RADIUS_M) return;
+  document.getElementById('encounter-overlay').classList.remove('active');
+  entry.horse.discoveredAt=new Date().toISOString();
+  state.horses.push(entry.horse);
+  if(entry.horse.isSecret) state.discoveredSecrets.push(entry.horse.secretKey);
+  map.removeLayer(entry.marker);
+  spawns=spawns.filter(s=>s!==entry);
+  saveState();
+  if(!state.selectedId) selectHorse(entry.horse.id);
+  ensureSpawns();
+  if(entry.horse.isSecret){
+    document.getElementById('secret-name').textContent=entry.horse.name;
+    document.getElementById('secret-overlay').classList.add('active');
+    document.getElementById('secret-ok').onclick=()=>{ document.getElementById('secret-overlay').classList.remove('active'); showCaughtSummary(entry.horse); };
+  } else showCaughtSummary(entry.horse);
+};
+function showCaughtSummary(h){ document.getElementById('caught-name').textContent=h.name+' the '+h.breed; document.getElementById('caught-meta').textContent=h.individualId+' · '+h.rarity.toUpperCase()+' · Paper · 0 XP'; document.getElementById('caught-overlay').classList.add('active'); }
+document.getElementById('caught-ok').onclick=()=>document.getElementById('caught-overlay').classList.remove('active');
+
+function selectHorse(id){ state.selectedId=id; saveState(); renderSelectedBar(); }
+function getSelected(){ return state.horses.find(h=>h.id===state.selectedId); }
+function renderSelectedBar(){
+  const h=getSelected(); const bar=document.getElementById('selected-card-bar');
+  if(!h){ bar.innerHTML='<div><div class="name">No horse selected</div><div class="meta">Catch a horse to begin</div></div>'; return; }
+  const tier=tierForXp(h.xp);
+  bar.innerHTML=`<div><div class="name">${h.name} · ${h.breed}</div><div class="meta">${tier.label} · ${h.xp.toLocaleString()} XP</div></div>`;
+}
+document.getElementById('selected-card-bar').addEventListener('click', ()=>{ const h=getSelected(); if(h) openCard(h.id,'map'); });
+
+function awardXp(horse, amount){
+  const before=tierForXp(horse.xp); horse.xp+=amount; const after=tierForXp(horse.xp); saveState(); renderSelectedBar();
+  if(after.id!==before.id){
+    document.getElementById('levelup-tier').textContent=after.label;
+    document.getElementById('levelup-horse').textContent=horse.name+' the '+horse.breed+' reached '+after.label+'!';
+    document.getElementById('levelup-overlay').classList.add('active');
+  }
+}
+document.getElementById('levelup-ok').onclick=()=>document.getElementById('levelup-overlay').classList.remove('active');
+function onDistanceWalked(meters){ state.distanceAccum+=meters; const h=getSelected(); if(!h) return; const xpGain=Math.floor(state.distanceAccum/2); if(xpGain>0){ state.distanceAccum-=xpGain*2; awardXp(h,xpGain); } }
+
+function renderDex(){
+  const discoveredBreeds=new Set(state.horses.map(h=>h.breed));
+  document.getElementById('dex-count').textContent=discoveredBreeds.size+' / '+BREEDS.length+' breeds';
+  const counts={common:0,uncommon:0,rare:0,epic:0,legendary:0}; state.horses.forEach(h=>{ if(counts[h.rarity]!==undefined) counts[h.rarity]++; });
+  document.getElementById('dex-rarity-row').innerHTML=Object.entries(counts).map(([k,v])=>`<span>${k[0].toUpperCase()+k.slice(1)}: ${v}</span>`).join('');
+  const grid=document.getElementById('dex-grid'); grid.innerHTML='';
+  const owned=state.horses.filter(h=>!h.isSecret);
+  if(owned.length===0) grid.innerHTML='<div style="grid-column:1/-1;color:var(--ink-dim);font-size:13px;">No horses yet — go explore.</div>';
+  owned.forEach(h=>{ const tier=tierForXp(h.xp); const card=document.createElement('div'); card.className='mini-card tier-'+tier.id; card.innerHTML=`<div class="tier-tag">${tier.label}</div><div class="art">🐴</div><div class="nm">${h.name}</div><div class="br">${h.breed} · ${h.individualId}</div>`; card.onclick=()=>openCard(h.id,'dex'); grid.appendChild(card); });
+  const sgrid=document.getElementById('secret-grid'); sgrid.innerHTML='';
+  const disc=state.horses.filter(h=>h.isSecret); const total=Math.max(SECRET_HORSES.length,disc.length);
+  if(total===0) sgrid.innerHTML='<div style="grid-column:1/-1;color:var(--ink-dim);font-size:13px;">No secret horses configured yet.</div>';
+  for(let i=0;i<total;i++){ const h=disc[i]; if(h){ const tier=tierForXp(h.xp); const card=document.createElement('div'); card.className='mini-card tier-'+tier.id; card.innerHTML=`<div class="tier-tag">${tier.label}</div><div class="art">🐴</div><div class="nm">${h.name}</div><div class="br">Secret · ${h.individualId}</div>`; card.onclick=()=>openCard(h.id,'dex'); sgrid.appendChild(card); } else { const card=document.createElement('div'); card.className='mini-card secret-hidden'; card.innerHTML='<div style="font-size:22px;">❔</div><div style="font-size:12px;margin-top:4px;">Not discovered</div>'; sgrid.appendChild(card); } }
+}
+
+let cardOrigin='map';
+function openCard(id, origin){
+  cardOrigin=origin; const h=state.horses.find(x=>x.id===id); if(!h) return;
+  const tier=tierForXp(h.xp), nt=nextTier(tier.id);
+  const statRows=Object.entries(h.stats).map(([k,v])=>`<div class="stat-row"><span>${k[0].toUpperCase()+k.slice(1)}</span><span>${v}</span></div>`).join('');
+  document.getElementById('card-body').innerHTML=`
+    <div class="big-card tier-${tier.id} ${h.isSecret?'secret':''}">
+      <div class="tier-label">${tier.label.toUpperCase()}</div><div class="art-box">🐴</div>
+      <div class="h-name">${h.name}</div><div class="h-breed">${h.breed}</div><div class="h-id">${h.individualId}</div>
+      <div class="rarity-tag">${RARITY_STARS[h.rarity]} ${h.rarity.toUpperCase()}</div>${statRows}
+    </div>
+    <div class="xp-block">
+      <div style="display:flex;justify-content:space-between;font-size:13px;"><span>${tier.label}</span><span>${h.xp.toLocaleString()} XP</span></div>
+      <div class="xp-bar-bg"><div class="xp-bar-fill" style="width:${nt?Math.min(100,((h.xp-tier.threshold)/(nt.threshold-tier.threshold))*100):100}%"></div></div>
+      <div class="xp-labels">${nt?`<span>${tier.threshold.toLocaleString()} XP</span><span>${nt.threshold.toLocaleString()} XP</span>`:'<span>Maximum tier reached</span>'}</div>
+    </div>
+    <div class="meta-block"><div>Coat: ${h.coat} · Markings: ${h.markings}</div><div>Caught: ${h.discoveredAt?new Date(h.discoveredAt).toLocaleDateString():'—'}</div></div>
+    <button class="select-btn" id="select-this">${state.selectedId===h.id?'Currently selected':'Select as current horse'}</button>`;
+  document.getElementById('select-this').onclick=()=>{ selectHorse(h.id); openCard(h.id,origin); };
+  showScreen('card-screen');
+}
+
+function showScreen(id){ document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active')); document.getElementById(id).classList.add('active'); }
+document.getElementById('btn-dex').onclick=()=>{ renderDex(); showScreen('dex-screen'); };
+document.getElementById('dex-back').onclick=()=>showScreen('map-screen');
+document.getElementById('card-back').onclick=()=>showScreen(cardOrigin==='dex'?'dex-screen':'map-screen');
+
+renderSelectedBar();
+</script>
+</body>
+</html>
